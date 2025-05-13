@@ -19,7 +19,6 @@ public class FuseBus {
         this.strategy = strategy;
     }
 
-    @SuppressWarnings("unchecked")
     public <R> void enqueue(String key, Object id, CompletableFuture<R> fut) {
         Bucket<R> bucket = (Bucket<R>) buckets.computeIfAbsent(key, Bucket::new);
         bucket.add(id, fut);

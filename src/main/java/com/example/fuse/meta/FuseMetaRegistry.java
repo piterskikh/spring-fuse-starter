@@ -3,13 +3,13 @@ package com.example.fuse.meta;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 @Component
 public class FuseMetaRegistry {
 
-    private final ConcurrentMap<String, FusibleMethodMeta> cache = new ConcurrentHashMap<>();
+    private final Map<String, FusibleMethodMeta> cache = new ConcurrentHashMap<>();
 
     /** called from your Aspect to register the Method’s metadata */
     public FusibleMethodMeta computeIfAbsent(Method m) {
