@@ -2,15 +2,14 @@ package com.example.fuse;
 
 import com.example.fuse.strategy.SingleKeyStrategy;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.web.client.RestTemplate;
 
-import java.util.List;
-import java.util.concurrent.Callable;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -18,36 +17,44 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-@SpringBootTest
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class FuseStarterApplicationTests {
-    @Autowired
-    private CustomerRepository repo;
+    @LocalServerPort
+    private int port;
+
+    private final RestTemplate restTemplate = new RestTemplate();
+
 
     @MockitoSpyBean
     private SingleKeyStrategy strategy;
 
     @Test
-    void testBatchingFindById() throws Exception {
-        // создаем ExecutorService, который на каждый таск порождает новую виртуальную нить
-        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            Callable<Customer> task1 = () -> repo.findById(1L).get();
-            Callable<Customer> task2 = () -> repo.findById(2L).get();
+    void testParallelRequests() {
+        String baseUrl = "http://localhost:" + port + "/api/customers";
 
-            // invokeAll запустит оба таска одновременно (каждый — в своей виртуальной нити)
-            List<Future<Customer>> futures = executor.invokeAll(List.of(task1, task2));
-            Customer c1 = futures.get(0).get();
-            Customer c2 = futures.get(1).get();
+        CompletableFuture<Void> request1 = CompletableFuture.runAsync(() -> {
+            ResponseEntity<Map> response = restTemplate.getForEntity(baseUrl + "/1", Map.class);
+            assertEquals(200, response.getStatusCode().value());
+            assertNotNull(response.getBody());
+            assertEquals(1, response.getBody().get("id"));
+            assertEquals("Alice", response.getBody().get("name"));
+            System.out.println("Request 1 completed: " + response.getBody());
+        });
 
-            assertNotNull(c1);
-            assertEquals("Alice", c1.getName());
-            assertNotNull(c2);
-            assertEquals("Bob", c2.getName());
+        CompletableFuture<Void> request2 = CompletableFuture.runAsync(() -> {
+            ResponseEntity<Map> response = restTemplate.getForEntity(baseUrl + "/2", Map.class);
+            assertEquals(200, response.getStatusCode().value());
+            assertNotNull(response.getBody());
+            assertEquals(2, response.getBody().get("id"));
+            assertEquals("Bob", response.getBody().get("name"));
+            System.out.println("Request 2 completed: " + response.getBody());
+        });
 
-            // даем время на flush
-            Thread.sleep(200);
-
-            verify(strategy, times(1)).batch(any());
-        }
+        // Ждём завершения обоих запросов
+        CompletableFuture.allOf(request1, request2).join();
+        //подтверждаем, что был совершен только один запрос к БД
+        verify(strategy, times(1)).batch(any());
+        System.out.println("Оба запроса завершены.");
     }
 }
+
