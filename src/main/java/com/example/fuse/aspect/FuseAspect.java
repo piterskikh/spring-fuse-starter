@@ -27,6 +27,12 @@ public class FuseAspect {
 
     @Around("@annotation(com.example.fuse.annotation.Fusible)")
     public Object aroundFusible(ProceedingJoinPoint pjp) throws Throwable {
+
+        // Если вызывающий поток НЕ виртуальный — просто выполнить исходный метод
+        if (!Thread.currentThread().isVirtual()) {
+            return pjp.proceed();
+        }
+
         MethodSignature sig    = (MethodSignature) pjp.getSignature();
         Method          method = sig.getMethod();
 
@@ -39,7 +45,7 @@ public class FuseAspect {
         // 3) поставить в очередь и заблокировать для получения объекта
         CompletableFuture<Object> fut = new CompletableFuture<>();
         fuseBus.enqueue(meta.getKey(), id, fut);
-        Object entity = fut.get();  // may be null if not found
+        Object entity = fut.get();  // carrier-thread освобождается
 
         // 4) если возвращаемый тип объявлен как Optional, обернуть объект
         if (Optional.class.equals(method.getReturnType())) {
